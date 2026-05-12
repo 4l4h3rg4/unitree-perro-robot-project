@@ -1,0 +1,9 @@
+aiortc==1.14.0
+fastapi==0.136.1
+go2-webrtc-connect==0.2.1
+google-adk==1.33.0
+google-genai==1.75.0
+python-dotenv==1.2.2
+python-multipart==0.0.28
+uvicorn==0.46.0
+websockets==15.0.1

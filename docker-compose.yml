@@ -1,0 +1,22 @@
+services:
+  go2-agent:
+    build: .
+    container_name: go2-agent
+    network_mode: host
+    environment:
+      - DASHBOARD_PORT=8001
+    command: python main.py --dashboard-only
+    restart: "no"
+    tty: true
+    stdin_open: true
+
+  go2-agent-cli:
+    build: .
+    container_name: go2-agent-cli
+    network_mode: host
+    command: python main.py --agent-only
+    restart: "no"
+    tty: true
+    stdin_open: true
+    profiles:
+      - cli
