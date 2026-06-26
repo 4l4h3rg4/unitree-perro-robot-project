@@ -59,6 +59,24 @@ async def connect_robot(event_bus: EventBus) -> Go2Connection:
     return robot
 
 
+async def _robot_watchdog(robot: Go2Connection, interval: int = 15):
+    """Reintenta conectar al robot en segundo plano si no esta conectado.
+    Permite que el dashboard arranque sin robot y conecte solo cuando el
+    robot este disponible (encendido, app del celular cerrada, etc.)."""
+    if not _should_connect():
+        return
+    while True:
+        await asyncio.sleep(interval)
+        if robot and not robot.connected:
+            print("Watchdog: robot no conectado, reintentando...")
+            try:
+                ok = await robot.connect()
+                if ok:
+                    print("Watchdog: robot reconectado exitosamente.")
+            except Exception as e:  # noqa: BLE001
+                print(f"Watchdog: fallo al reconectar: {e}")
+
+
 async def run_agent(robot: Go2Connection):
     agent = Go2Agent(
         robot=robot,
@@ -110,7 +128,12 @@ async def main():
         print(f"\nDashboard web en http://localhost:{args.port}")
         print("Presiona Ctrl+C para detener.")
         from web_dashboard.server import run_dashboard
-        await run_dashboard(event_bus, robot, host=args.host, port=args.port)
+        watchdog = asyncio.create_task(_robot_watchdog(robot)) if robot else None
+        try:
+            await run_dashboard(event_bus, robot, host=args.host, port=args.port)
+        finally:
+            if watchdog:
+                watchdog.cancel()
     elif args.agent_only:
         if not robot or not robot.connected:
             print("No hay conexion con el robot. El agente no puede funcionar sin robot.")

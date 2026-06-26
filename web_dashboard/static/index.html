@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Unitree Go2 - Dashboard</title>
-<link rel="stylesheet" href="/static/style.css">
+<link rel="stylesheet" href="/static/style.css?v=2">
 </head>
 <body>
 <div class="container">
@@ -17,121 +17,55 @@
   </header>
 
   <div class="grid">
-    <!-- Batería -->
-    <div class="card" id="card-battery">
-      <h3>🔋 Batería</h3>
-      <div class="battery-gauge">
-        <svg viewBox="0 0 120 120">
-          <circle cx="60" cy="60" r="52" fill="none" stroke="#333" stroke-width="10"/>
-          <circle id="battery-arc" cx="60" cy="60" r="52" fill="none" stroke="#4caf50" stroke-width="10"
-            stroke-dasharray="326.7" stroke-dashoffset="326.7" stroke-linecap="round"
-            transform="rotate(-90 60 60)"/>
-        </svg>
-        <div class="battery-pct" id="battery-pct">--%</div>
-      </div>
-      <div class="battery-details">
-        <span id="battery-volt">-- V</span>
-        <span id="battery-temp">-- °C</span>
-      </div>
-    </div>
-
-    <!-- Velocidad -->
-    <div class="card" id="card-speed">
-      <h3>📊 Velocidad</h3>
-      <div class="chart-wrapper">
-        <canvas id="chart-speed" width="400" height="180"></canvas>
-      </div>
-      <div class="speed-compass">
-        <div class="compass-arrow" id="compass-arrow"></div>
-      </div>
-      <div class="speed-values">
-        <span id="speed-vx">vx: 0.00</span>
-        <span id="speed-vyaw">vyaw: 0.00</span>
-      </div>
-    </div>
-
-    <!-- IMU -->
-    <div class="card" id="card-imu">
-      <h3>📐 IMU / Orientación</h3>
-      <div class="imu-values">
-        <div class="imu-axis">
-          <span class="label">Roll</span>
-          <span class="value" id="imu-roll">0.0°</span>
-        </div>
-        <div class="imu-axis">
-          <span class="label">Pitch</span>
-          <span class="value" id="imu-pitch">0.0°</span>
-        </div>
-        <div class="imu-axis">
-          <span class="label">Yaw</span>
-          <span class="value" id="imu-yaw">0.0°</span>
-        </div>
-      </div>
-      <div class="stability-indicator" id="stability">
-        <span id="stability-icon">⚪</span>
-        <span id="stability-label">Sin datos</span>
-      </div>
-    </div>
-
-    <!-- LiDAR -->
-    <div class="card" id="card-lidar">
-      <h3>📡 LiDAR</h3>
-      <div class="lidar-wrapper">
-        <canvas id="canvas-lidar" width="300" height="300"></canvas>
-      </div>
-      <div class="lidar-info">
-        <span id="lidar-min-dist">Dist min: -- m</span>
-        <span id="lidar-points">Puntos: 0</span>
-      </div>
-      <div class="obstacle-indicator" id="obstacle-indicator">
-        <span id="obstacle-icon">⚪</span>
-        <span id="obstacle-label">Sin datos</span>
-      </div>
-    </div>
-
     <!-- Cámara -->
-    <div class="card" id="card-camera">
-      <h3>📷 Cámara</h3>
-      <div class="camera-placeholder" id="camera-placeholder">
-        <span>Esperando stream...</span>
+    <div class="card card-camera">
+      <h3>📷 Cámara en vivo</h3>
+      <div class="camera-frame">
+        <div class="camera-placeholder" id="camera-placeholder">
+          <span>Esperando stream...</span>
+        </div>
+        <img id="camera-img" class="camera-stream" alt="Cámara del robot" style="display:none">
+        <div id="camera-overlay" class="camera-overlay" style="display:none"></div>
       </div>
-      <video id="camera-video" autoplay playsinline muted style="display:none"></video>
-      <div id="camera-overlay" class="camera-overlay" style="display:none"></div>
     </div>
 
-    <!-- Postura + Seguridad -->
-    <div class="card" id="card-posture">
-      <h3>🦿 Postura</h3>
-      <div class="posture-display">
-        <span id="posture-icon">❓</span>
-        <span id="posture-label">Desconocida</span>
-      </div>
-      <h3 style="margin-top:16px">🛡️ Seguridad</h3>
-      <div id="alerts-container"></div>
-      <button id="btn-emergency" class="btn-emergency" onclick="emergencyStop()">
-        🛑 STOP EMERGENCIA
-      </button>
-    </div>
+    <!-- Agente: input + comandos -->
+    <aside class="card card-agent">
+      <h3>🧠 Hablale al robot</h3>
 
-    <!-- Razonamiento + Acciones -->
-    <div class="card" id="card-reasoning">
-      <h3>🧠 Razonamiento del agente</h3>
       <div class="reasoning-bubble" id="reasoning-text">
         Esperando instrucciones...
       </div>
-    </div>
 
-    <!-- Log de eventos -->
-    <div class="card" id="card-log">
-      <h3>📋 Log de eventos</h3>
-      <div class="log-container" id="log-container">
-        <div class="log-entry">Dashboard iniciado.</div>
+      <div class="prompt-bar">
+        <input id="prompt-input" type="text" placeholder="Ej: avanza, izquierda, love, baila..."
+               autocomplete="off" onkeydown="if(event.key==='Enter')sendPrompt()">
+        <button id="prompt-mic" class="btn-mic" onclick="toggleRecording()" title="Hablar por voz">🎤</button>
+        <button id="prompt-send" onclick="sendPrompt()">➤</button>
       </div>
-    </div>
+
+      <div class="chips-label">Acciones rápidas</div>
+      <div class="prompt-chips">
+        <button onclick="quickPrompt('avanza')">⬆️ Avanza</button>
+        <button onclick="quickPrompt('retrocede')">⬇️ Retrocede</button>
+        <button onclick="quickPrompt('izquierda')">⬅️ Izquierda</button>
+        <button onclick="quickPrompt('derecha')">➡️ Derecha</button>
+        <button onclick="quickPrompt('parate')">🧍 Párate</button>
+        <button onclick="quickPrompt('sientate')">🪑 Siéntate</button>
+        <button onclick="quickPrompt('saluda')">👋 Saluda</button>
+        <button onclick="quickPrompt('love')">❤️ Love</button>
+        <button onclick="quickPrompt('baila')">🕺 Baila</button>
+      </div>
+
+      <div class="alerts-mini" id="alerts-container"></div>
+
+      <button id="btn-emergency" class="btn-emergency" onclick="emergencyStop()">
+        🛑 STOP DE EMERGENCIA
+      </button>
+    </aside>
   </div>
 </div>
 
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
-<script src="/static/dashboard.js"></script>
+<script src="/static/dashboard.js?v=2"></script>
 </body>
 </html>

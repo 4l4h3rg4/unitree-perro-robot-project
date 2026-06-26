@@ -1,4 +1,5 @@
 import asyncio
+import io
 import json
 import logging
 import os
@@ -6,6 +7,10 @@ import sys
 import time
 import uuid
 from typing import Any, Callable, Dict, Optional
+
+from .webrtc_compat import apply_webrtc_compat_patch
+
+apply_webrtc_compat_patch()
 
 from go2_webrtc_driver.constants import DATA_CHANNEL_TYPE, RTC_TOPIC, SPORT_CMD
 from go2_webrtc_driver.webrtc_driver import Go2WebRTCConnection, WebRTCConnectionMethod
@@ -108,23 +113,22 @@ class Go2Connection:
         if not self._connected or not self._pub_sub:
             raise ConnectionError("Robot no conectado")
 
-        cmd_id = int(time.time() * 1000) % 2147483648
-        payload = {
-            "header": {
-                "identity": {
-                    "id": cmd_id,
-                    "api_id": api_id,
-                }
-            },
-            "parameter": json.dumps(parameter) if parameter is not None else "",
-        }
+        # Patron correcto del driver: publish_request_new arma el header con
+        # api_id y resuelve el future con la respuesta "rt/api/sport/response".
+        # (El publish() crudo con RTC_INNER_REQ no emparejaba la respuesta y
+        # quedaba colgado para siempre.)
+        options: Dict[str, Any] = {"api_id": api_id}
+        if parameter is not None:
+            options["parameter"] = parameter
 
-        response = await self._pub_sub.publish(
-            RTC_TOPIC["SPORT_MOD"],
-            payload,
-            DATA_CHANNEL_TYPE["RTC_INNER_REQ"],
-        )
-        return response
+        try:
+            return await asyncio.wait_for(
+                self._pub_sub.publish_request_new(RTC_TOPIC["SPORT_MOD"], options),
+                timeout=5.0,
+            )
+        except asyncio.TimeoutError:
+            logger.warning(f"Comando sport {api_id} sin respuesta (timeout)")
+            return {}
 
     async def stand_up(self):
         return await self._send_sport_cmd(SPORT_CMD["StandUp"])
@@ -349,14 +353,22 @@ class Go2Connection:
         if self._video:
 
             async def frame_callback(track):
-                try:
-                    frame = await track.recv()
+                consecutive_errors = 0
+                while self._connected:
+                    try:
+                        frame = await track.recv()
+                    except Exception as e:
+                        consecutive_errors += 1
+                        if consecutive_errors in (1, 10, 30):
+                            logger.warning(f"Error recibiendo frame de camara: {e}")
+                        await asyncio.sleep(min(1.0, 0.05 * consecutive_errors))
+                        continue
+
+                    consecutive_errors = 0
                     self._latest_video_frame = frame
                     if self._frame_callback:
                         self._frame_callback(frame)
                     self._emit("sensor.camera", {"frame_available": True})
-                except Exception:
-                    pass
 
             self._video.add_track_callback(frame_callback)
             self._video.switchVideoChannel(True)
@@ -366,6 +378,24 @@ class Go2Connection:
 
     def get_latest_frame(self):
         return self._latest_video_frame
+
+    def get_jpeg_frame(self, quality: int = 70) -> Optional[bytes]:
+        """Convierte el ultimo frame de la camara (av.VideoFrame) a bytes JPEG.
+        Devuelve None si aun no hay frame disponible."""
+        frame = self._latest_video_frame
+        if frame is None:
+            return None
+        try:
+            img = frame.to_image()  # av.VideoFrame -> PIL.Image
+        except AttributeError:
+            from PIL import Image
+            import numpy as np
+
+            arr = frame if isinstance(frame, np.ndarray) else frame.to_ndarray(format="rgb24")
+            img = Image.fromarray(arr)
+        buf = io.BytesIO()
+        img.save(buf, format="JPEG", quality=quality)
+        return buf.getvalue()
 
     async def enable_video(self):
         if self._video:
